@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leyes de los gases</title>
+<style>
+:root{color-scheme:dark;--bg:#101b2a;--panel:#192a3e;--line:#344c64;--mint:#76e4ce;--gold:#ffc675}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:#eff6ff;font:16px/1.45 system-ui,sans-serif}
+main{max-width:1160px;margin:auto;padding:clamp(12px,3vw,32px)}
+h1{font-size:clamp(26px,4vw,38px);margin:0 0 14px}
+h2{font-size:18px;margin:0 0 12px}
+p{margin:10px 0}.muted,small{color:#bdd0e3}
+.toolbar,.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.toolbar{justify-content:space-between;margin-bottom:14px}
+nav{display:flex;gap:6px;flex-wrap:wrap}
+button,select,input:not([type=range]){font:inherit;color:inherit;background:#101f31;border:1px solid #536c85;border-radius:7px;padding:6px 9px}
+button,select{cursor:pointer;touch-action:manipulation}button,select,input.field{min-height:44px}button[aria-pressed=true],#apply{background:var(--mint);color:#102531;border-color:var(--mint);font-weight:650}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.layout{display:grid;grid-template-columns:minmax(295px,.85fr) minmax(0,1.15fr);gap:12px;align-items:start}
+.controls,.setup-panel{grid-column:1}
+.tank-panel,.plot-panel{grid-column:2}
+.controls,.tank-panel{grid-row:1}
+.setup-panel,.plot-panel{grid-row:2}
+section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:14px}
+th,td{text-align:left;padding:5px 4px;border-bottom:1px solid var(--line)}
+td:last-child{color:var(--mint);overflow-wrap:anywhere;max-width:8rem}
+input.field{width:100%;min-width:0}input.field:disabled{opacity:.65}
+label.slider{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;column-gap:12px;margin:8px 0}
+.slider output{justify-self:end;color:var(--mint);overflow-wrap:anywhere}
+input[type=range]{grid-column:span 2;width:100%;height:44px;margin:0;accent-color:var(--mint);background:transparent;touch-action:pan-y;appearance:none;-webkit-appearance:none}
+input[type=range]::-webkit-slider-runnable-track{height:7px;background:#496580;border-radius:6px}
+input[type=range]::-moz-range-track{height:7px;background:#496580;border-radius:6px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:var(--mint);margin-top:-10.5px;border:2px solid #101f31}
+input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:var(--mint);border:2px solid #101f31}
+.check{display:inline-flex;align-items:center;min-height:44px;gap:7px}
+.check input{width:22px;height:22px;accent-color:var(--mint)}
+canvas{display:block;width:100%;background:#101f31;border-radius:7px}
+#tank{height:clamp(142px,23vh,210px)}#plot{height:clamp(205px,27vh,255px)}
+#formula{font-weight:700;color:var(--mint);font-size:23px}
+#rate,#notice{color:var(--gold)}#notice{min-height:1.4em}
+@media(max-width:660px){
+  .layout{grid-template-columns:minmax(0,1fr)}
+  .layout>section{grid-column:auto;grid-row:auto}
+  #laws{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}
+  #laws button{width:100%}
+}
+@media(pointer:coarse){
+  button,select,input.field{min-height:48px}
+  input[type=range]{height:48px}
+}
+</style>
+<main>
+<h1>Leyes de los gases</h1>
+<div class="toolbar">
+<nav aria-label="Ley de los gases" id="laws"></nav>
+<label>Unidad de presión <select id="unit"><option>atm</option><option>mmHg</option><option>kPa</option></select></label>
+</div>
+<div class="layout">
+<section class="controls">
+<h2>Controles del experimento</h2>
+<div id="sliders"></div>
+<p id="formula"></p>
+<p id="explain"></p>
+<small id="limit"></small>
+</section>
+<section class="tank-panel">
+<h2>Partículas y pistón</h2>
+<canvas id="tank" role="img" aria-label="Partículas de gas rebotando contra las paredes de un recipiente con pistón"></canvas>
+<p><strong id="rate">Choques/s: 0</strong> <span class="muted">· Último segundo de simulación</span></p>
+<div class="actions"><button type="button" id="pause" aria-pressed="false">Pausar</button><label class="check"><input id="arrows" type="checkbox"> Vectores de velocidad</label></div>
+<small>El ancho representa el volumen. Los choques pertenecen a las partículas dibujadas y la presión se calcula con pV = nRT.</small>
+</section>
+<section class="setup-panel">
+<h2>Estados del gas</h2>
+<label>Calcular <select id="unknown"></select></label>
+<form id="setup" novalidate>
+<table>
+<thead><tr><th scope="col">Variable</th><th scope="col">Inicial</th><th scope="col">Final</th></tr></thead>
+<tbody id="states"></tbody>
+</table>
+<div class="actions"><button id="apply">Aplicar datos</button><button id="reset" type="button">Reiniciar</button></div>
+<div id="notice" role="status"></div>
+</form>
+</section>
+<section class="plot-panel">
+<h2>Gráfica del experimento</h2>
+<canvas id="plot" role="img" aria-label="Gráfica de la relación entre las variables"></canvas>
+<small><span style="color:#bdd0e3">● Inicial</span> <span style="color:#ffc675">● Final</span></small>
+</section>
+</div>
+</main>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const keys = ['p','V','T','n'];
+const names = {p:'Presión',V:'Volumen',T:'Temperatura',n:'Cantidad'};
+const symbols = {p:'p',V:'V',T:'T',n:'n'};
+const units = {atm:101.325,mmHg:101.325/760,kPa:1};
+const R = 8.314462618;
+const limits = {p:[.001,1e7],V:[.001,1e5],T:[1,1e5],n:[.000001,1e4]};
+const laws = [
+  {name:'Boyle',pair:['V','p'],formula:'p₁ V₁ = p₂ V₂', explanation:'La temperatura y la cantidad de gas son constantes. Al comprimir el gas, las partículas tienen menos espacio y chocan más a menudo contra una misma zona de pared. Si duplicas el volumen, la presión se reduce a la mitad.'},
+  {name:'Charles',pair:['T','V'],formula:'V₁ / T₁ = V₂ / T₂', explanation:'La presión y la cantidad de gas son constantes. Al calentar, las partículas se mueven más rápido y el pistón se desplaza para que el gas se expanda. Si duplicas la temperatura en kelvin, se duplica el volumen.'},
+  {name:'Gay-Lussac',pair:['T','p'],formula:'p₁ / T₁ = p₂ / T₂', explanation:'El volumen y la cantidad de gas son constantes. Al calentar, las partículas chocan más a menudo y con más fuerza contra las paredes. Si duplicas la temperatura en kelvin, se duplica la presión.'},
+  {name:'Gas ideal',pair:['V','p'],formula:'pV = nRT', explanation:'Elige qué variable calcular y mueve cualquiera de los otros tres controles. Las partículas se mueven más rápido al subir la temperatura. Al aumentar la cantidad de gas, aparecen más partículas.'}
+];
+const fmt = new Intl.NumberFormat('es-ES',{useGrouping:false,maximumSignificantDigits:6});
+const num = value => fmt.format(value);
+const unit = k => ({p:$('unit').value,V:'L',T:'K',n:'mol'})[k];
+const factor = k => k === 'p' ? units[unit(k)] : 1;
+const label = k => names[k] + ' (' + unit(k) + ')';
+const valueText = (k,v) => num(v/factor(k));
+const positive = v => Number.isFinite(v) && v > 0;
+function solve(values, key, boundary = false) {
+  const s = {...values};
+  if (boundary && positive(s.n)) {
+    if (key === 'p' && s.T === 0 && positive(s.V)) return {...s,p:0};
+    if (key === 'V' && s.T === 0 && positive(s.p)) return {...s,V:0};
+    if (key === 'T' && ((s.p === 0 && positive(s.V)) || (s.V === 0 && positive(s.p)))) return {...s,T:0};
+  }
+  if (!keys.every(k => k === key || positive(s[k]))) throw Error('Introduce valores finitos mayores que cero.');
+  const equations = {p:() => s.n*R*s.T/s.V,V:() => s.n*R*s.T/s.p,T:() => s.p*s.V/(s.n*R),n:() => s.p*s.V/(R*s.T)};
+  s[key] = equations[key]();
+  if (!positive(s[key])) throw Error('El resultado queda fuera del rango numérico.');
+  return s;
+}
+const defaults = () => solve({V:2.5,T:300,n:.1},'p');
+let law = 0, initial = defaults(), state = {...initial}, driver = 'V', result = 'p', paused = false;
+let particles = [], hits = [], bins = [], clock = 0, refresh = .5, oldWidth = 0;
+const options = keys.map(k => '<option value="'+k+'">'+names[k]+' ('+symbols[k]+')</option>').join('');
+$('unknown').innerHTML = options;
+$('laws').innerHTML = laws.map((item,i) => '<button type="button" data-law="'+i+'">'+item.name+'</button>').join('');
+$('states').innerHTML = keys.map(k => '<tr><th scope="row" id="name-'+k+'"></th><td><input class="field" id="in-'+k+'" inputmode="decimal" autocomplete="off"></td><td id="out-'+k+'"></td></tr>').join('');
+function resetCounter(){
+  bins=[]; hits=[]; clock=0; refresh=.5; $('rate').textContent='Choques/s: 0';
+}
+function syncFields() {
+  for (const k of keys) $('in-'+k).value = valueText(k,initial[k]);
+}
+function syncState() {
+  for (const k of keys) {
+    $('name-'+k).textContent = label(k);
+    $('in-'+k).setAttribute('aria-label', label(k)+' inicial');
+    $('in-'+k).disabled = k === $('unknown').value;
+    $('out-'+k).textContent = valueText(k,state[k]);
+  }
+  $('limit').textContent = state.T === 0 ? '0 K es un límite teórico del modelo.' : '';
+}
+function bounds(k){
+  if (k === 'T') return [0,2000,false];
+  if (law === 1 || law === 2) return [0,initial[k]*2000/initial.T,false];
+  return [initial[k]/4,initial[k]*4,true];
+}
+function sliderKeys(){return law < 3 ? laws[law].pair : keys.filter(k => k !== $('unknown').value);}
+function syncSliders(){
+  for (const k of sliderKeys()){
+    const [lo,hi,log] = bounds(k);
+    const t = log ? Math.log(state[k]/lo)/Math.log(hi/lo) : (state[k]-lo)/(hi-lo);
+    $('s-'+k).value = Math.max(0,Math.min(1000,Math.round(1000*t)));
+    $('s-'+k).setAttribute('aria-valuetext',valueText(k,state[k])+' '+unit(k));
+    $('sl-'+k).textContent = label(k);
+    $('sv-'+k).textContent = valueText(k,state[k]);
+  }
+}
+function buildSliders(){
+  $('sliders').innerHTML = sliderKeys().map(k => '<label class="slider"><span id="sl-'+k+'"></span><output id="sv-'+k+'"></output><input type="range" min="0" max="1000" id="s-'+k+'" aria-labelledby="sl-'+k+'"></label>').join('');
+  for (const k of sliderKeys()) $('s-'+k).addEventListener('input',e => {
+    const [lo,hi,log] = bounds(k), t=Number(e.target.value)/1000;
+    const nextResult=law<3 ? laws[law].pair.find(v=>v!==k) : $('unknown').value;
+    const values={...(law<3?initial:state),[k]:log?lo*(hi/lo)**t:lo+(hi-lo)*t};
+    try{
+      state=solve(values,nextResult,true);
+      driver=k; result=nextResult;
+      $('notice').textContent='';
+      if (state.T===0) resetCounter();
+    }catch(error){ $('notice').textContent='En ese límite no se puede calcular la variable elegida.'; }
+    update();
+  });
+}
+let plotPending=false;
+function queuePlot(){
+  if(plotPending)return;
+  plotPending=true;
+  requestAnimationFrame(()=>{plotPending=false;drawPlot();});
+}
+function update(){syncState();syncSliders();queuePlot();}
+function selectLaw(i){
+  if (!keys.every(k=>positive(state[k]))) state={...initial};
+  law=i;
+  initial={...state};
+  [driver,result]=laws[law].pair;
+  $('unknown').value=result;
+  for(const b of $('laws').children) b.setAttribute('aria-pressed',Number(b.dataset.law)===law);
+  $('formula').textContent=laws[law].formula;
+  $('explain').textContent=laws[law].explanation;
+  $('notice').textContent='';
+  syncFields();buildSliders();resetCounter();update();
+}
+$('laws').addEventListener('click',e=>{if(e.target.matches('button')) selectLaw(Number(e.target.dataset.law));});
+$('unknown').addEventListener('change',()=>{
+  if(!keys.every(k=>positive(state[k]))) state={...initial};
+  if(law===3){result=$('unknown').value;if(driver===result) driver=sliderKeys()[0];}
+  $('notice').textContent='';
+  buildSliders();update();
+});
+let pressureUnit=$('unit').value;
+$('unit').addEventListener('change',()=>{
+  const field=$('in-p');
+  const parsed=parse(field.value);
+  if(Number.isFinite(parsed)) field.value=num(parsed*units[pressureUnit]/units[$('unit').value]);
+  pressureUnit=$('unit').value;
+  update();
+});
+function parse(value){
+  const raw=value.trim();
+  return raw === '' ? NaN : Number(raw.replace(',','.'));
+}
+$('setup').addEventListener('submit',e=>{
+  e.preventDefault();
+  const key=$('unknown').value, values={};
+  try{
+    for(const k of keys.filter(v=>v!==key)){
+      values[k]=parse($('in-'+k).value)*factor(k);
+      const [lo,hi]=limits[k];
+      if(!(values[k]>=lo && values[k]<=hi)) throw Error(label(k)+': introduce un valor entre '+valueText(k,lo)+' y '+valueText(k,hi)+'.');
+    }
+    initial=solve(values,key);state={...initial};
+    $('notice').textContent='Estado inicial actualizado.';
+    syncFields();resetCounter();update();
+  }catch(error){$('notice').textContent=error.message;}
+});
+$('reset').addEventListener('click',()=>{state=defaults();particles=[];selectLaw(law);});
+$('pause').addEventListener('click',()=>{
+  paused=!paused;
+  $('pause').textContent=paused?'Reanudar':'Pausar';
+  $('pause').setAttribute('aria-pressed',paused);
+});
+function canvas(id){
+  const node=$(id), w=node.clientWidth, h=node.clientHeight;
+  const dpr=Math.min(id==='tank'?1.5:2,window.devicePixelRatio||1);
+  if(!(w && h)) return null;
+  if(node.width!==Math.round(w*dpr)||node.height!==Math.round(h*dpr)){
+    node.width=Math.round(w*dpr);node.height=Math.round(h*dpr);
+  }
+  const ctx=node.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+  return {ctx,w,h};
+}
+function line(ctx,x1,y1,x2,y2,color,width=1){
+  ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+}
+function dot(ctx,x,y,r,color){
+  ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,r,0,2*Math.PI);ctx.fill();
+}
+function drawPlot(){
+  const surface=canvas('plot');if(!surface)return;
+  const {ctx,w,h}=surface;
+  const [xkey,ykey]=law<3?laws[law].pair:[driver,result];
+  const [low,high]=bounds(xkey);
+  const lo=Math.min(low,state[xkey],initial[xkey]),hi=Math.max(high,state[xkey],initial[xkey]);
+  const points=[];
+  for(let i=0;i<=150;i++){
+    const x=lo+(hi-lo)*i/150;
+    try{points.push([x,solve({...state,[xkey]:x},ykey,true)[ykey]]);}catch{/* Exclude undefined points. */}
+  }
+  const top=Math.max(1e-12,state[ykey],initial[ykey],...points.map(p=>p[1]))*1.08;
+  ctx.font='12px system-ui';
+  const left=Math.min(w*.4,Math.max(56,...[0,1,2,3,4].map(i=>ctx.measureText(valueText(ykey,top*i/4)).width+10)));
+  const right=w-19, bottom=h-46, upper=34;
+  const px=x=>left+(x-lo)/(hi-lo)*(right-left);
+  const py=y=>bottom-y/top*(bottom-upper);
+  ctx.fillStyle='#bdd0e3';ctx.fillText(label(ykey),10,19);
+  for(let i=0;i<=4;i++){
+    const y=top*i/4;
+    line(ctx,left,py(y),right,py(y),'#344c64');
+    ctx.textAlign='right';ctx.fillText(valueText(ykey,y),left-6,py(y)+4,left-8);
+  }
+  for(let i=0;i<=2;i++){
+    const x=lo+(hi-lo)*i/2;
+    line(ctx,px(x),upper,px(x),bottom,'#344c64');
+    ctx.textAlign=i===2?'right':'center';ctx.fillText(valueText(xkey,x),px(x),bottom+16,Math.max(25,(right-left)/2));
+  }
+  ctx.textAlign='center';ctx.fillText(label(xkey),(left+right)/2,h-8);
+  ctx.strokeStyle='#76e4ce';ctx.lineWidth=2;ctx.beginPath();
+  points.forEach(([x,y],i)=>i?ctx.lineTo(px(x),py(y)):ctx.moveTo(px(x),py(y)));ctx.stroke();
+  dot(ctx,px(state[xkey]),py(state[ykey]),6,'#ffc675');
+  if(initial[xkey]===state[xkey]&&initial[ykey]===state[ykey]) dot(ctx,px(initial[xkey]),py(initial[ykey]),2,'#bdd0e3');
+  else dot(ctx,px(initial[xkey]),py(initial[ykey]),4,'#bdd0e3');
+  $('plot').setAttribute('aria-label',label(ykey)+' frente a '+label(xkey));
+}
+let last=0, tankVisible=true;
+if('IntersectionObserver' in window){
+  new IntersectionObserver(([entry])=>{
+    tankVisible=entry.isIntersecting;
+    last=0;
+  }).observe($('tank'));
+}
+function animate(time){
+  requestAnimationFrame(animate);
+  if(!tankVisible||document.hidden){last=0;return;}
+  if(last&&time-last<30)return;
+  const surface=canvas('tank'),dt=last?Math.min(.06,(time-last)/1000):0;
+  last=time;if(!surface)return;
+  const {ctx,w,h}=surface;
+  const scale=Math.max(7.725,(law===1?bounds('V')[1]:initial.V*4)*1.03,state.V*1.03);
+  const width=Math.max(12,(w-26)*state.V/scale),height=h-26;
+  const count=Math.max(10,Math.min(180,Math.round(65*state.n/.1)));
+  while(particles.length<count){
+    const a=Math.random()*Math.PI*2,s=.35+1.4*Math.random();
+    particles.push({x:Math.random(),y:Math.random(),vx:Math.cos(a)*s,vy:Math.sin(a)*s});
+  }
+  particles.length=count;
+  if(Math.abs(oldWidth-width)>.01) hits=[];
+  oldWidth=width;
+  const speed=Math.min(700,62*Math.sqrt(state.T/300));
+  let impacts=0;
+  if(!paused){
+    clock+=dt;
+    for(const p of particles){
+      for(const [axis,size] of [['x',width],['y',height]]){
+        const v='v'+axis;
+        let pos=p[axis]+p[v]*speed*dt/size;
+        while(pos<0||pos>1){
+          const edge=pos<0?0:1;
+          pos=2*edge-pos;p[v]=-p[v];impacts++;
+          if(hits.length<160) hits.push({x:axis==='x'?edge:p.x,y:axis==='y'?edge:p.y,until:clock+.24});
+        }
+        p[axis]=pos;
+      }
+    }
+    if(impacts) bins.push({time:clock,count:impacts});
+    while(bins.length&&bins[0].time<=clock-1) bins.shift();
+    if(clock>=refresh){
+      $('rate').textContent='Choques/s: '+bins.reduce((total,b)=>total+b.count,0);
+      refresh=(Math.floor(clock*2)+1)/2;
+    }
+    hits=hits.filter(hit=>hit.until>clock);
+  }
+  ctx.fillStyle='#203d50';ctx.fillRect(13,13,width,height);
+  ctx.save();ctx.beginPath();ctx.rect(13,13,width,height);ctx.clip();
+  for(const p of particles){
+    const x=13+p.x*width,y=13+p.y*height;
+    if($('arrows').checked) line(ctx,x,y,x+p.vx*speed*.13,y+p.vy*speed*.13,'#a9c6d5');
+    dot(ctx,x,y,3,'#85bdff');
+  }
+  ctx.restore();
+  ctx.strokeStyle='#9cb1c9';ctx.lineWidth=1;ctx.strokeRect(13,13,width,height);
+  line(ctx,13+width,13,13+width,13+height,'#76e4ce',4);
+  for(const hit of hits){
+    ctx.globalAlpha=Math.min(1,(hit.until-clock)/.24);
+    dot(ctx,13+hit.x*width,13+hit.y*height,4,'#ffc675');
+  }
+  ctx.globalAlpha=1;
+}
+selectLaw(0);
+new ResizeObserver(queuePlot).observe($('plot'));
+requestAnimationFrame(animate);
+</script>
+</html>
